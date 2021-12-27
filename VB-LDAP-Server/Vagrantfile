@@ -1,0 +1,183 @@
+################################################################################
+# FILE NAME   : Vagrantfile
+# FILE TYPE   : Vagrantfile
+# VERSION     : 210727
+# ARGS        
+# --help, -h                       : Show Vagrantfile options
+# --verbose, -v                    : Verbose installation
+# --managementIP=MANAGEMNT_IP      : Specify the managment IP
+# --ntpIP=NTP_IP                   : Specify the NTP server IP
+# --timezone=TIME_ZONE             : Specify the time zone
+# --name=VM_NAME                   : Specify a name for the VM
+# --ip=VM_IP                       : Specify an IP for the VM
+# --cpus=VM_CPUS                   : Specify the VM core number
+# --memory=VM_MEMORY               : Specify the VM memory amount in ko
+# --domain=LDAP_DOMAIN             : Specify the domain company
+# --organization=LDAP_ORGANIZATION : Specify the organisation company
+# --adminPwd=ADMIN_PWD             : Specify LDAP admin password
+#
+# AUTHOR      : PEDSF
+# EMAIL       : pedsf.fullstack@gmail.com
+#
+# DESCRIPTION : LDAP server installation
+################################################################################
+require 'getoptlong'
+
+###################################################################### CONSTANTS
+MANAGMENT_IP = ".*"
+NTP_IP = "10.1.33.11"
+NETWORK_TIMEZONE = "Europe/Paris"
+VM_NAME = 'Vagrant-Ldap-server'
+VM_HOSTNAME = "LDAP-server"
+VM_IP = "10.1.33.12"
+VM_CPUS = "1"
+VM_MEMORY = "1024"
+VM_GUI = false
+LDAP_DOMAIN = "mycompany.com"
+LDAP_ORGANIZATION = "mycompany"
+LDAP_ADMIN_PWD = "ldapAdmin"
+
+###################################################################### VARIABLES
+verbose = nil
+managmentIP = "#{MANAGMENT_IP}"
+ntpIP = "#{NTP_IP}"
+networkTimezone = "#{NETWORK_TIMEZONE}"
+vmName = "#{VM_NAME}"
+vmHostname = "#{VM_HOSTNAME}"
+vmIP = "#{VM_IP}"
+vmCpus = "#{VM_CPUS}"
+vmMemory = "#{VM_MEMORY}"
+ldapDomain = "#{LDAP_DOMAIN}"
+ldapOrganization = "#{LDAP_ORGANIZATION}"
+ldapAdminPassword = "#{LDAP_ADMIN_PWD}"
+
+
+#################################################################### LAUNCH ARGS
+opts = GetoptLong.new(
+  [ '--help', '-h', GetoptLong::NO_ARGUMENT ],
+  [ '--verbose', '-v', GetoptLong::NO_ARGUMENT ],
+  [ '--managmentIP', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--ntpIP', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--timezone', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--name', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--ip', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--cpus', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--memory', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--domain', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--organization', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--adminPwd', GetoptLong::REQUIRED_ARGUMENT ]
+)
+
+opts.each do |opt, arg|
+  case opt
+    when '--help'
+      puts <<-EOF
+Vagrant [OPTION] ...
+--help, -h:
+    Show this help
+--verbose, -v:
+    Verbose installation
+--managemntIP=MANAGMENT_IP:
+    Set the managment IP, if IP is not supplied default is #{MANAGMENT_IP}
+--ntpIP=NTP_IP:
+    Set the NTP server IP, if IP is not supplied default is #{NTP_IP}
+--timezone=TIME_ZONE:
+    Set time zone of the network, if time zone is not supplied default is #{NETWORK_TIMEZONE}
+--name=VM_NAME:
+    Set VM name, if name is not supplied default is #{VM_NAME}
+--ip=VM_IP:
+    Set VM IP, if IP is not supplied default is #{VM_IP}
+--cpus=VM_CPUS:
+    Set VM core number, if the number of cores is not supplied default is #{VM_CPUS}
+--ip=VM_MEMORY:
+    Set VM memory amount, if the memory in ko is not supplied default is #{VM_MEMORY}
+--domain=LDAP_DOMAIN:
+    Set the the domain company, if the domain is not supplied default is #{LDAP_DOMAIN}
+--organization=LDAP_ORGANIZATION:
+    Set the organisation company, if the organization is not supplied default is #{LDAP_ORGANIZATION}
+--adminPwd=ADMIN_PWD:
+    Set the LDAP admin password, if the password is not supplied default is #{LDAP_ADMIN_PWD}
+      EOF
+    exit 0
+    when '--verbose'
+      verbose = opt
+    when '--managmentIP'
+      managmentIP = arg
+    when '--ntpIP'
+      ntpIP = arg
+    when '--timezone'
+      networkTimezone = arg
+    when '--name'
+      vmName = arg
+    when '--ip'
+      vmIP = arg
+    when '--cpus'
+      vmCpus = arg
+    when '--memory'
+      vmMemory = arg
+    when '--domain'
+      ldapDomain = arg
+    when '--organization'
+      ldapOrganization = arg
+    when '--adminPwd'
+      ldapAdminPassword = arg
+  end
+end
+
+case ARGV[0]
+when "provision", "up"
+  def ask_password(message, default_value)
+    print message
+    system 'stty -echo'
+    pass = URI.escape(STDIN.gets.chomp)
+    if pass == '' 
+      pass = default_value
+    end
+    ensure
+    system 'stty echo'
+    return pass  
+  end
+
+  if verbose != nil 
+    print "\nManagment IP : #{managmentIP}\n"
+    print "NTP server IP : #{ntpIP}\n"
+    print "Network time zone : #{networkTimezone}\n"
+    print "Name : #{vmName}\n"
+    print "IP : #{vmIP}\n"
+    print "Cores : #{vmCpus}\n"
+    print "Memory : #{vmMemory}\n"
+    print "Domain : #{ldapDomain}\n"
+    print "Organization : #{ldapOrganization}\n"
+    print "Admin password : #{ldapAdminPassword}\n"
+  end  
+end 
+
+########################################################################## BUILD
+Vagrant.configure("2") do |config|
+  config.vm.box = "ubuntu/focal64"
+  config.vm.box_url = "ubuntu/focal64"
+  config.vm.box_check_update = true  
+  config.vm.network "private_network", ip: vmIP
+  config.vm.hostname = vmHostname
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--name", vmName]
+    vb.cpus = vmCpus
+    vb.memory = vmMemory
+    vb.gui = VM_GUI
+  end
+
+ 
+  # launch LDAP install
+  ldapParameters = "#{verbose}"
+  ldapParameters += " --managmentIP #{managmentIP}"
+  ldapParameters += " --ntpIP #{ntpIP}"
+  ldapParameters += " --timezone #{networkTimezone}"
+  ldapParameters += " --hostname #{vmHostname}"
+  ldapParameters += " --ip #{vmIP}"
+  
+  config.vm.provision :shell, :path => "ldap-install.sh", :args => ldapParameters
+end
+

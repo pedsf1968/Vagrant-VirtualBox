@@ -1,0 +1,209 @@
+################################################################################
+# FILE NAME   : Vagrantfile
+# FILE TYPE   : Vagrantfile
+# VERSION     : 210723
+# ARGS        
+# --help, -h                    : Show Vagrantfile options
+# --verbose, -v                 : Verbose installation
+# --managementIP=MANAGEMNT_IP   : Specify the managment IP
+# --ntpIP=NTP_IP                : Specify the NTP server IP
+# --timezone=TIME_ZONE          : Specify the time zone
+# --name=VM_NAME                : Specify a name for the VM
+# --ip=VM_IP                    : Specify an IP for the VM
+# --cpus=VM_CPUS                : Specify the VM core number
+# --memory=VM_MEMORY            : Specify the VM memory amount in ko
+# --archive=TOMCAT_ARCHIVE_LINK : Specify the Tomcat URL link archive
+# --directory=TOMCAT_DIRECTORY  : Specify the installation directory of Tomcat
+# --askPwd                      : Ask for Tomcat manager and admin password
+# --managerPwd=MANAGER_PWD      : Set Tomcat manager password
+# --adminPwd=ADMIN_PWD          : Set Tomcat admin password
+#
+# AUTHOR      : PEDSF
+# EMAIL       : pedsf.fullstack@gmail.com
+#
+# DESCRIPTION : TOMCAT server installation
+################################################################################
+require 'getoptlong'
+
+###################################################################### CONSTANTS
+MANAGMENT_IP = ".*"
+NTP_IP = "10.1.33.11"
+NETWORK_TIMEZONE = "Europe/Paris"
+VM_NAME = 'Vagrant-Tomcat-server'
+VM_HOSTNAME = "TOMCAT-server"
+VM_IP = "10.1.33.21"
+VM_CPUS = "1"
+VM_MEMORY = "1024"
+VM_GUI = false
+TOMCAT_ARCHIVE_LINK="https://downloads.apache.org/tomcat/tomcat-9/v9.0.50/bin/apache-tomcat-9.0.50.tar.gz"
+TOMCAT_DIRECTORY="/etc/tomcat"
+TOMCAT_MANAGER_PWD="Manager"
+TOMCAT_ADMIN_PWD="Admin"
+
+###################################################################### VARIABLES
+verbose = nil
+managmentIP = "#{MANAGMENT_IP}"
+ntpIP = "#{NTP_IP}"
+networkTimezone = "#{NETWORK_TIMEZONE}"
+vmName = "#{VM_NAME}"
+vmHostname = "#{VM_HOSTNAME}"
+vmIP = "#{VM_IP}"
+vmCpus = "#{VM_CPUS}"
+vmMemory = "#{VM_MEMORY}"
+tomcatArchiveLink = "#{TOMCAT_ARCHIVE_LINK}"
+tomcatDirectory = "#{TOMCAT_DIRECTORY}"
+askPassword = nil
+tomcatManagerPassword = "#{TOMCAT_MANAGER_PWD}"
+tomcatAdminPassword = "#{TOMCAT_ADMIN_PWD}"
+
+#################################################################### LAUNCH ARGS
+opts = GetoptLong.new(
+  [ '--help', '-h', GetoptLong::NO_ARGUMENT ],
+  [ '--verbose', '-v', GetoptLong::NO_ARGUMENT ],
+  [ '--managmentIP', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--ntpIP', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--timezone', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--name', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--ip', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--cpus', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--memory', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--archive', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--directory', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--askPwd', GetoptLong::NO_ARGUMENT ],
+  [ '--managerPwd', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--adminPwd', GetoptLong::REQUIRED_ARGUMENT ]
+)
+
+opts.each do |opt, arg|
+  case opt
+    when '--help'
+      puts <<-EOF
+Vagrant [OPTION] ...
+--help, -h:
+    Show this help
+--verbose, -v:
+    Verbose installation
+--managemntIP=MANAGMENT_IP:
+    Set the managment IP, if IP is not supplied default is #{MANAGMENT_IP}
+--ntpIP=NTP_IP:
+    Set the NTP server IP, if IP is not supplied default is #{NTP_IP}
+--timezone=TIME_ZONE:
+    Set time zone of the network, if time zone is not supplied default is #{NETWORK_TIMEZONE}
+--name=VM_NAME:
+    Set VM name, if name is not supplied default is #{VM_NAME}
+--ip=VM_IP:
+    Set VM IP, if IP is not supplied default is #{VM_IP}
+--cpus=VM_CPUS:
+    Set VM core number, if the number of cores is not supplied default is #{VM_CPUS}
+--ip=VM_MEMORY:
+    Set VM memory amount, if the memory in ko is not supplied default is #{VM_MEMORY}
+--archive=TOMCAT_ARCHIVE_URL:
+    Specify Tomcat URL archive, if URL is not supplied default is #{TOMCAT_ARCHIVE_LINK}
+--directory=TOMCAT_DIRECTORY:
+    Specify Tomcat directory in VM, if directory is not supplied default is #{TOMCAT_DIRECTORY}
+--askPwd:
+    Ask password for Tomcat manager and admin
+--managerPwd=MANAGER_PWD:
+    Set Tomcat manager password, if IP is not supplied default is #{TOMCAT_MANAGER_PWD}
+--managerPwd=ADMIN_PWD:
+    Set Tomcat admin password, if IP is not supplied default is #{TOMCAT_ADMIN_PWD}
+      EOF
+    exit 0
+    when '--verbose'
+      verbose = opt
+    when '--managmentIP'
+      managmentIP = arg
+    when '--ntpIP'
+      ntpIP = arg
+    when '--timezone'
+      networkTimezone = arg
+    when '--name'
+      vmName = arg
+    when '--ip'
+      vmIP = arg
+    when '--cpus'
+      vmCpus = arg
+    when '--memory'
+      vmMemory = arg
+    when '--archive'
+      tomcatArchiveLink = arg
+    when '--directory'
+      tomcatDirectory = arg
+    when '--askPwd'
+      askPassword = 'True'
+    when '--managerPwd'
+      tomcatManagerPassword = arg
+    when '--adminPwd'
+      tomcatAdminPassword = arg
+  end
+end
+
+case ARGV[0]
+when "provision", "up"
+  def ask_password(message, default_value)
+    print message
+    system 'stty -echo'
+    pass = URI.escape(STDIN.gets.chomp)
+    if pass == '' 
+      pass = default_value
+    end
+    ensure
+    system 'stty echo'
+    return pass  
+  end
+
+  # Ask for Tomcat manager and admin pw
+  if askPassword != nil
+    tomcatManagerPassword = ask_password("Enter Tomcat manager password :",TOMCAT_MANAGER_PW)
+    tomcatAdminPassword = ask_password("Enter Tomcat admin password :",TOMCAT_ADMIN_PW)
+  end
+
+  if verbose != nil 
+    print "\nManagment IP : #{managmentIP}\n"
+    print "NTP server IP : #{ntpIP}\n"
+    print "Network time zone : #{networkTimezone}\n"
+    print "Name : #{vmName}\n"
+    print "IP : #{vmIP}\n"
+    print "Cores : #{vmCpus}\n"
+    print "Memory : #{vmMemory}\n"
+    print "Tomcat archive : #{tomcatArchiveLink}\n"
+    print "Tomcat directory : #{tomcatDirectory}\n"  
+    print "Tomcat manager password : #{tomcatManagerPassword}\n"  
+    print "Tomcat admin password : #{tomcatAdminPassword}\n"  
+  end  
+end 
+
+########################################################################## BUILD
+Vagrant.configure("2") do |config|
+  config.vm.box = "ubuntu/focal64"
+  config.vm.box_url = "ubuntu/focal64"
+  config.vm.box_check_update = true  
+  config.vm.network "private_network", ip: vmIP
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--name", vmName]
+    vb.cpus = vmCpus
+    vb.memory = vmMemory
+    vb.gui = VM_GUI
+  end
+
+  # Copy Tomcat configuration files to VM
+  #config.vm.provision "file", source: "tomcat.service", destination: "/tmp/tomcat.service"
+  
+  # launch tomcat install
+  tomcatParameters = "#{verbose}"
+  tomcatParameters += " --managmentIP #{managmentIP}"
+  tomcatParameters += " --ntpIP #{ntpIP}"
+  tomcatParameters += " --timezone #{networkTimezone}"
+  tomcatParameters += " --hostname #{vmHostname}"
+  tomcatParameters += " --ip #{vmIP}"
+  tomcatParameters += " --archive #{tomcatArchiveLink}"
+  tomcatParameters += " --directory #{tomcatDirectory}"
+  tomcatParameters += " --managerPwd #{tomcatManagerPassword}"
+  tomcatParameters += " --adminPwd #{tomcatAdminPassword}"
+  
+  config.vm.provision :shell, :path => "tomcat-install.sh", :args => tomcatParameters
+end
+

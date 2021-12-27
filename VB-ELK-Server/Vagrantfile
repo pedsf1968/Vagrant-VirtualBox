@@ -1,0 +1,157 @@
+################################################################################
+# FILE NAME   : Vagrantfile
+# FILE TYPE   : Vagrantfile
+# VERSION     : 211223
+# ARGS        
+# --help, -h               : Show Vagrantfile options
+# --verbose, -v            : Verbose installation
+# --name=VM_NAME           : Specify a name for the VM
+# --hostname=VM_HOSTNAME   : Specify a hostname for the VM
+# --ip=VM_IP               : Specify an IP for the VM
+# --cpus=VM_CPUS           : Specify the VM core number
+# --memory=VM_MEMORY       : Specify the VM memory amount in ko
+#
+# AUTHOR      : PEDSF
+# EMAIL       : pedsf.fullstack@gmail.com
+#
+# DESCRIPTION : ELK server installation
+################################################################################
+require 'getoptlong'
+
+###################################################################### CONSTANTS
+LOG_DIRECTORY="/home/vagrant/logs"
+
+VM_NAME = "Vagrant-ELK-server"
+VM_HOSTNAME = "ELK-server"
+VM_IP = "10.1.33.15"
+VM_CPUS = "2"
+VM_MEMORY = "1024"
+VM_GUI = true
+
+ELASTICSEARCH_KEY="https://artifacts.elastic.co/GPG-KEY-elasticsearch"
+ELASTICSEARCH_SRC="https://artifacts.elastic.co/packages/7.x/apt stable main"
+ELASTICSEARCH_PKG="elasticsearch-7.16.2-amd64.deb"
+ELASTICSEARCH_PKG_URL="https://artifacts.elastic.co/downloads/elasticsearch"
+
+KIBANA_ARCHIVE="kibana-7.16.2-linux-x86_64.tar.gz"
+KIBANA_URL="https://artifacts.elastic.co/downloads/kibana"
+
+
+###################################################################### VARIABLES
+verbose = nil
+vmName = "#{VM_NAME}"
+vmHostname = "#{VM_HOSTNAME}"
+vmIP = "#{VM_IP}"
+vmCpus = "#{VM_CPUS}"
+vmMemory = "#{VM_MEMORY}"
+
+
+#################################################################### LAUNCH ARGS
+opts = GetoptLong.new(
+  [ '--help', '-h', GetoptLong::NO_ARGUMENT ],
+  [ '--verbose', '-v', GetoptLong::NO_ARGUMENT ],
+  [ '--name', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--hostname', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--ip', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--cpus', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--memory', GetoptLong::REQUIRED_ARGUMENT ],
+)
+
+opts.each do |opt, arg|
+  case opt
+    when '--help'
+      puts <<-EOF
+Vagrant [OPTION] ...
+-h, --help:
+    show this help
+-v, --verbose:
+    Verbose installation
+--name=VM_NAME:
+    Set VM name, if name is not supplied default is #{VM_NAME}
+--hostname=VM_HOSTNAME:
+    Set VM hostname, if hostname is not supplied default is #{VM_HOSTNAME}
+--ip=VM_IP:
+    Set VM IP, if IP is not supplied default is #{VM_IP}
+--cpus=VM_CPUS:
+    Set VM core number, if the number of cores is not supplied default is #{VM_CPUS}
+--ip=VM_MEMORY:
+    Set VM memory amount, if the memory in ko is not supplied default is #{VM_MEMORY}
+    EOF
+    exit 0
+    when '--verbose'
+      verbose = opt
+    when '--name'
+      vmName = arg
+    when '--hostname'
+      vmHostname = arg
+    when '--ip'
+      vmIP = arg
+    when '--cpus'
+      vmCpus = arg
+    when '--memory'
+      vmMemory = arg
+  end
+end
+
+case ARGV[0]
+when "provision", "up"
+
+  if verbose != nil
+    print "\nName : #{vmName}\n"
+    print "\nHostname : #{vmHostname}\n"
+    print "IP : #{vmIP}\n"
+    print "Cores : #{vmCpus}\n"
+    print "Memory : #{vmMemory}\n"
+  end
+end
+
+########################################################################## BUILD
+Vagrant.configure("2") do |config|
+  config.vm.box = "ubuntu/focal64"
+  config.vm.box_url = "ubuntu/focal64"
+  config.vm.box_check_update = true
+  config.vm.hostname = vmHostname
+  config.vm.network "private_network", ip: vmIP
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--name", vmName]
+    vb.cpus = vmCpus
+    vb.memory = vmMemory
+    vb.gui = VM_GUI   
+  end
+
+  # launch common install
+  commonParameters = "#{verbose}"
+  commonParameters += " --logprefix #{logPrefix}"
+  commonParameters += " --logdirectory #{LOG_DIRECTORY}"
+  commonParameters += " --logfile common.log"
+  commonParameters += " --hostname #{vmHostname}"
+  commonParameters += " --ip #{vmIP}"
+  
+  config.vm.provision :shell, :path => "common-install.sh", :args => commonParameters
+
+  # launch Elasticsearch install
+  elasticsearchParameters = "#{verbose}"
+  elasticsearchParameters += " --logprefix #{logPrefix}"
+  elasticsearchParameters += " --logdirectory #{LOG_DIRECTORY}"
+  elasticsearchParameters += " --logfile elasticsearch.log"
+  elasticsearchParameters += " --elastickey #{ELASTICSEARCH_KEY}"
+  elasticsearchParameters += " --elasticsrc #{ELASTICSEARCH_SRC}"
+  elasticsearchParameters += " --elasticpkg #{ELASTICSEARCH_PKG}"
+  elasticsearchParameters += " --elasticurl #{ELASTICSEARCH_PKG_URL}"
+  
+  config.vm.provision :shell, :path => "elasticsearch-install.sh", :args => elasticsearchParameters
+
+  # launch Kibana install
+  kibanaParameters = "#{verbose}"
+  kibanaParameters += " --logprefix #{logPrefix}"
+  kibanaParameters += " --logdirectory #{LOG_DIRECTORY}"
+  kibanaParameters += " --logfile kibana.log"
+  kibanaParameters += " --kibanaarchive #{KIBANA_ARCHIVE}"
+  kibanaParameters += " --kibanaurl #{KIBANA_URL}"
+
+  config.vm.provision :shell, :path => "elasticsearch-install.sh", :args => kibanaParameters
+
+end

@@ -1,0 +1,42 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+###################################################################### CONSTANTS
+VM_NAME = "Debian-jessie64"
+VM_HOSTNAME = "Debian-9"
+VM_IP = "192.168.1.18"
+VM_CPUS = "1"
+VM_MEMORY = "1024"
+VM_GUI = false
+
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "debian/jessie64"
+  config.vm.box_url = "debian/jessie64"
+  config.vm.box_check_update = true  
+  config.vm.network "private_network", ip: VM_IP
+  config.vm.hostname = VM_HOSTNAME
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--name", VM_NAME]
+    vb.cpus = VM_CPUS
+    vb.memory = VM_MEMORY
+    vb.gui = VM_GUI
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+  echo "VM - Update"
+  sudo apt-get update > /dev/null 2>&1
+  echo "VM - Upgrade"
+  sudo apt-get upgrade -y > /dev/null 2>&1
+  echo "VM - Common package install"
+  sudo apt-get install -y vim tree dpkg net-tools telnet python3-pip sshpass nfs-common > /dev/null 2>&1
+  echo "VM - SSH setting"
+  sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/g' /etc/ssh/sshd_config
+  sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+  echo "VM - Services restart"
+  sudo systemctl restart sshd
+SHELL
+end

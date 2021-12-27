@@ -1,0 +1,57 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+VM_IP = "10.1.33.21"
+VM_BOX_NAME = "ubuntu/focal64"
+VM_NAME = "VB-Ubuntu-focal64"
+VM_MEMORY = "1024"
+VM_CPUS = "2"
+VM_DISK_SIZE = "20GB"
+
+Vagrant.configure("2") do |config|
+
+  required_plugins = %w( vagrant-vbguest vagrant-disksize )
+  _retry = false
+  required_plugins.each do |plugin|
+      unless Vagrant.has_plugin? plugin
+          system "vagrant plugin install #{plugin}"
+          _retry=true
+      end
+  end
+
+  if (_retry)
+      exec "vagrant " + ARGV.join(' ')
+  end
+
+  config.vm.box = VM_BOX_NAME
+  config.vm.box_url = VM_BOX_NAME
+  config.vm.box_check_update = true 
+  config.vm.network "private_network", ip: VM_IP
+  # config.disksize.size = VM_DISK_SIZE
+  config.vm.disk :disk, size: VM_DISK_SIZE, primary: true
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--name", VM_NAME]
+    # Display the VirtualBox GUI when booting the machine
+    vb.gui = false
+    vb.memory = VM_MEMORY
+    vb.cpus = VM_CPUS
+    
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    echo "VM - Update"
+    sudo apt-get update > /dev/null 2>&1
+    echo "VM - Upgrade"
+    sudo apt-get upgrade -y > /dev/null 2>&1
+    echo "VM - Common package install"
+    sudo apt-get install -y -qq git vim tree net-tools telnet python3-pip sshpass nfs-common > /dev/null 2>&1
+    echo "VM - SSH setting"
+    sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/g' /etc/ssh/sshd_config
+    sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+    echo "VM - Services restart"
+    sudo systemctl restart sshd
+  SHELL
+end
