@@ -1,11 +1,13 @@
 ################################################################################
 # FILE NAME   : chrony-install.sh
 # FILE TYPE   : BASH
-# VERSION     : 210719
+# VERSION     : 211227
 # ARGS        
-# --verbose                : Verbose installation
-# --hostname VM_HOSTNAME   : Specify a hostname for the VM
-# --ip VM_IP               : Specify an IP for the VM
+# --verbose                      : Verbose installation
+# --logprefix LOG_PREFIX         : Specify prefix of log message
+# --logdirectory LOG_DIRECTORY   : Specify the directory of installation log file
+# --logfile LOG_FILE             : Specify the installation log file name
+#
 # --timezone TIME_ZONE     : Specify the time zone
 # --range NETWORK_IP_RANGE : Network range IP for NTP network
 #
@@ -16,9 +18,10 @@
 ################################################################################
 
 ###################################################################### CONSTANTS
-MESSAGE_PREFIX="CHRONY"
+LOG_PREFIX="CHRONY"
 LOG_DIRECTORY=/home/vagrant/logs
-LOG_FILE=$LOG_DIRECTORY/chrony.log
+LOG_FILE=chrony.log
+
 NETWORK_TIMEZONE="Europe/Paris"
 VM_HOSTNAME="NTP-server"
 VM_IP="10.1.33.11"
@@ -26,21 +29,26 @@ NETWORK_IP_RANGE='10.1.33.00/24'
 
 ###################################################################### VARIABLES
 verbose=''
+logPrefix=$LOG_PREFIX
+logDirectory=$LOG_DIRECTORY
+logFile=$LOG_FILE
+
 networkTimezone=$NETWORK_TIMEZONE
-vmHostname=$VM_HOSTNAME
-vmIP=$VM_IP
 networkIpRange=$NETWORK_IP_RANGE
 
 while [[ $# > 0 ]]; do
    case $1 in
    --verbose)
       verbose="True";;
-   --hostname)
+   --logprefix)
       shift
-      vmHostname=$1;;
-   --ip)
+      logPrefix=$1;;
+   --logdirectory)
       shift
-      vmIP=$1;;
+      logDirectory=$1;;
+   --logfile)
+      shift
+      logFile=$1;;
    --timezone)
       shift
       networkTimezone=$1;;
@@ -52,67 +60,39 @@ while [[ $# > 0 ]]; do
 done
 
 ###################################################################### FUNCTIONS
-linux-update(){   
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Update"; fi
-   sudo apt-get update >> ${LOG_FILE}
-   sudo apt-get upgrade -y >> ${LOG_FILE}
-}
-
-common_install(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Common install"; fi
-   sudo apt-get install -y -qq vim net-tools telnet python3-pip sshpass nfs-common >> ${LOG_FILE}
-}
-
-ssh_setting(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - SSH setting"; fi 
-   sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/g' /etc/ssh/sshd_config
-   sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-}
-
 chrony-install(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Install"; fi 
-   sudo apt install -y chrony >> ${LOG_FILE}
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Install"; fi 
+   sudo apt install -y chrony >> ${logDirectory}/${logFile}
 }
 
 chrony-configure(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Configuration setting"; fi 
-   sudo bash -c "echo 'allow '$NETWORK_IP_RANGE >> /etc/chrony/chrony.conf"
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Configuration setting"; fi 
+   sudo bash -c "echo 'allow '$networkIpRange >> /etc/chrony/chrony.conf"
    sudo timedatectl set-timezone ${networkTimezone}
-
-   # set right name and IP in /etc/hosts file
-   sudo sed -i /${vmHostname}/d /etc/hosts
-   sudo sed -i s/^ubuntu*/${vmHostname}/g /etc/hosts
-   sudo bash -c "echo ${vmIP}\t${vmHostname}\t${vmHostname} >> /etc/hosts"
 }
 
 services_restart() {
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Services restart"; fi 
-   sudo systemctl daemon-reload >> ${LOG_FILE}
-   sudo systemctl restart sshd >> ${LOG_FILE}
-   sudo timedatectl set-ntp false >> ${LOG_FILE}
-   sudo systemctl enable chrony >> ${LOG_FILE} 
-   sudo systemctl start chrony >> ${LOG_FILE} 
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Services restart"; fi 
+   sudo systemctl daemon-reload >> ${logDirectory}/${logFile}
+   sudo timedatectl set-ntp false >> ${logDirectory}/${logFile}
+   sudo systemctl enable chrony >> ${logDirectory}/${logFile} 
+   sudo systemctl start chrony >> ${logDirectory}/${logFile} 
 }
 
 ########################################################################### MAIN
 main() {
    if [[ -n $verbose ]]; then
-      echo "${MESSAGE_PREFIX} - Parameters"
+      echo "${logPrefix} - Parameters"
       echo "VERBOSE : ${verbose}"
-      echo "Log directory : ${LOG_DIRECTORY}"
-      echo "Log file : ${LOG_FILE}"
-      echo "Hostname : ${vmHostname}"
-      echo "IP : ${vmIP}"
+      echo "Log directory : ${logDirectory}"
+      echo "Log file : ${logFile}"
       echo "Network range : ${networkIpRange}"
       echo "Network time zone : ${networkTimezone}"
    fi
 
-   mkdir -p $LOG_DIRECTORY
-   touch $LOG_FILE
+   mkdir -p ${logDirectory}
+   touch ${logDirectory}/${logFile}
    
-   linux-update
-   common_install
-   ssh_setting
    chrony-install
    chrony-configure
    services_restart

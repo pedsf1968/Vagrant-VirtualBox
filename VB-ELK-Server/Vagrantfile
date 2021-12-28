@@ -5,6 +5,9 @@
 # ARGS        
 # --help, -h               : Show Vagrantfile options
 # --verbose, -v            : Verbose installation
+# --ntpip=NTP_IP           : Specify the NTP server IP
+# --timezone=TIME_ZONE     : Specify the time zone
+#
 # --name=VM_NAME           : Specify a name for the VM
 # --hostname=VM_HOSTNAME   : Specify a hostname for the VM
 # --ip=VM_IP               : Specify an IP for the VM
@@ -20,36 +23,51 @@ require 'getoptlong'
 
 ###################################################################### CONSTANTS
 LOG_DIRECTORY="/home/vagrant/logs"
+LOG_PREFIX="ELK"
+
+NTP_IP = "10.1.33.11"
+NETWORK_TIMEZONE = "Europe/Paris"
 
 VM_NAME = "Vagrant-ELK-server"
 VM_HOSTNAME = "ELK-server"
 VM_IP = "10.1.33.15"
-VM_CPUS = "2"
-VM_MEMORY = "1024"
-VM_GUI = true
+VM_CPUS = "4"
+VM_MEMORY = "4096"
+VM_GUI = false
 
+ELASTICSEARCH_IP="#{VM_IP}"
+ELASTICSEARCH_PORT=9200
 ELASTICSEARCH_KEY="https://artifacts.elastic.co/GPG-KEY-elasticsearch"
 ELASTICSEARCH_SRC="https://artifacts.elastic.co/packages/7.x/apt stable main"
-ELASTICSEARCH_PKG="elasticsearch-7.16.2-amd64.deb"
-ELASTICSEARCH_PKG_URL="https://artifacts.elastic.co/downloads/elasticsearch"
 
-KIBANA_ARCHIVE="kibana-7.16.2-linux-x86_64.tar.gz"
-KIBANA_URL="https://artifacts.elastic.co/downloads/kibana"
-
+KIBANA_IP="#{VM_IP}"
+KIBANA_PORT=5601
+KIBANA_KEY="#{ELASTICSEARCH_KEY}"
+KIBANA_SRC="#{ELASTICSEARCH_SRC}"
 
 ###################################################################### VARIABLES
 verbose = nil
+ntpIP = "#{NTP_IP}"
+networkTimezone = "#{NETWORK_TIMEZONE}"
+
 vmName = "#{VM_NAME}"
 vmHostname = "#{VM_HOSTNAME}"
 vmIP = "#{VM_IP}"
 vmCpus = "#{VM_CPUS}"
 vmMemory = "#{VM_MEMORY}"
 
+elasticsearchIP = "#{ELASTICSEARCH_IP}"
+elasticsearchPort ="#{ELASTICSEARCH_PORT}"
+
+kibanaIP = "#{KIBANA_IP}"
+kibanaPort ="#{KIBANA_PORT}"
 
 #################################################################### LAUNCH ARGS
 opts = GetoptLong.new(
   [ '--help', '-h', GetoptLong::NO_ARGUMENT ],
   [ '--verbose', '-v', GetoptLong::NO_ARGUMENT ],
+  [ '--ntpip', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--timezone', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--name', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--hostname', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--ip', GetoptLong::REQUIRED_ARGUMENT ],
@@ -66,6 +84,10 @@ Vagrant [OPTION] ...
     show this help
 -v, --verbose:
     Verbose installation
+--ntpip=NTP_IP:
+    Set the NTP server IP, if IP is not supplied default is #{NTP_IP}
+--timezone=TIME_ZONE:
+    Set time zone of the network, if time zone is not supplied default is #{NETWORK_TIMEZONE}
 --name=VM_NAME:
     Set VM name, if name is not supplied default is #{VM_NAME}
 --hostname=VM_HOSTNAME:
@@ -80,6 +102,10 @@ Vagrant [OPTION] ...
     exit 0
     when '--verbose'
       verbose = opt
+    when '--ntpip'
+      ntpIP = arg
+    when '--timezone'
+      networkTimezone = arg
     when '--name'
       vmName = arg
     when '--hostname'
@@ -97,9 +123,15 @@ case ARGV[0]
 when "provision", "up"
 
   if verbose != nil
+    print "NTP server IP : #{ntpIP}\n"
+    print "Network time zone : #{networkTimezone}\n"
     print "\nName : #{vmName}\n"
-    print "\nHostname : #{vmHostname}\n"
-    print "IP : #{vmIP}\n"
+    print "Hostname : #{vmHostname}\n"
+    print "VM IP : #{vmIP}\n"
+    print "Elasticsearch IP : #{elasticsearchIP}\n"
+    print "Elasticsearch port : #{elasticsearchPort}\n"
+    print "Kibana IP : #{kibanaIP}\n"
+    print "Kibana port : #{kibanaPort}\n"
     print "Cores : #{vmCpus}\n"
     print "Memory : #{vmMemory}\n"
   end
@@ -112,7 +144,9 @@ Vagrant.configure("2") do |config|
   config.vm.box_check_update = true
   config.vm.hostname = vmHostname
   config.vm.network "private_network", ip: vmIP
-
+  config.vm.network :forwarded_port, guest: elasticsearchPort, host: elasticsearchPort
+  config.vm.network :forwarded_port, guest: kibanaPort, host: kibanaPort
+  
   config.vm.provider "virtualbox" do |vb|
     vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
     vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
@@ -124,34 +158,38 @@ Vagrant.configure("2") do |config|
 
   # launch common install
   commonParameters = "#{verbose}"
-  commonParameters += " --logprefix #{logPrefix}"
+  commonParameters += " --logprefix #{LOG_PREFIX}-Common"
   commonParameters += " --logdirectory #{LOG_DIRECTORY}"
   commonParameters += " --logfile common.log"
+  commonParameters += " --ntpIP #{ntpIP}"
+  commonParameters += " --timezone #{networkTimezone}"
   commonParameters += " --hostname #{vmHostname}"
   commonParameters += " --ip #{vmIP}"
   
-  config.vm.provision :shell, :path => "common-install.sh", :args => commonParameters
+  config.vm.provision :shell, :path => "../VB-Common/common-install.sh", :args => commonParameters
 
   # launch Elasticsearch install
   elasticsearchParameters = "#{verbose}"
-  elasticsearchParameters += " --logprefix #{logPrefix}"
+  elasticsearchParameters += " --logprefix #{LOG_PREFIX}-Elasticsearch"
   elasticsearchParameters += " --logdirectory #{LOG_DIRECTORY}"
   elasticsearchParameters += " --logfile elasticsearch.log"
-  elasticsearchParameters += " --elastickey #{ELASTICSEARCH_KEY}"
-  elasticsearchParameters += " --elasticsrc #{ELASTICSEARCH_SRC}"
-  elasticsearchParameters += " --elasticpkg #{ELASTICSEARCH_PKG}"
-  elasticsearchParameters += " --elasticurl #{ELASTICSEARCH_PKG_URL}"
+  elasticsearchParameters += " --ip #{elasticsearchIP}"
+  elasticsearchParameters += " --port #{elasticsearchPort}"
+  elasticsearchParameters += " --key #{ELASTICSEARCH_KEY}"
+  elasticsearchParameters += " --src #{ELASTICSEARCH_SRC}"
   
   config.vm.provision :shell, :path => "elasticsearch-install.sh", :args => elasticsearchParameters
 
   # launch Kibana install
   kibanaParameters = "#{verbose}"
-  kibanaParameters += " --logprefix #{logPrefix}"
+  kibanaParameters += " --logprefix #{LOG_PREFIX}-Kibana"
   kibanaParameters += " --logdirectory #{LOG_DIRECTORY}"
   kibanaParameters += " --logfile kibana.log"
-  kibanaParameters += " --kibanaarchive #{KIBANA_ARCHIVE}"
-  kibanaParameters += " --kibanaurl #{KIBANA_URL}"
+  kibanaParameters += " --ip #{kibanaIP}"
+  kibanaParameters += " --port #{kibanaPort}"
+  kibanaParameters += " --key #{KIBANA_KEY}"
+  kibanaParameters += " --src #{KIBANA_SRC}"
 
-  config.vm.provision :shell, :path => "elasticsearch-install.sh", :args => kibanaParameters
+  config.vm.provision :shell, :path => "kibana-install.sh", :args => kibanaParameters
 
 end

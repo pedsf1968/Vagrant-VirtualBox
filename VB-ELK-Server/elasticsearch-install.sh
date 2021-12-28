@@ -3,7 +3,15 @@
 # FILE TYPE   : BASH
 # VERSION     : 211223
 # ARGS        
-# --verbose                : Verbose installation
+# --verbose                      : Verbose installation
+# --logprefix LOG_PREFIX         : Specify prefix of log message
+# --logdirectory LOG_DIRECTORY   : Specify the directory of installation log file
+# --logfile LOG_FILE             : Specify the installation log file name
+#
+# --ip ELASTICSEARCH_IP          : Specify the IP for Elasticsearch (127.0.0.1)
+# --port ELASTICSEARCH_PORT      : Specify the port for Elasticsearch (9200)
+# --key ELASTICSEARCH_KEY        : Elasticsearch GPG repository key
+# --src ELASTICSEARCH_SRC        : Elasticsearch repository url
 #
 # AUTHOR      : PEDSF
 # EMAIL       : pedsf.fullstack@gmail.com
@@ -14,25 +22,23 @@
 ###################################################################### CONSTANTS
 MESSAGE_PREFIX="ELK"
 LOG_DIRECTORY=/home/vagrant/logs
-LOG_FILE=$LOG_DIRECTORY/elk.log
-VM_HOSTNAME="ELK-server"
-VM_IP="10.1.33.11"
+LOG_FILE=elasticsearch.log
 
+ELASTICSEARCH_IP="127.0.0.1"
+ELASTICSEARCH_PORT=9200
 ELASTICSEARCH_KEY="https://artifacts.elastic.co/GPG-KEY-elasticsearch"
-ELASTICSEARCH_SRC="https://artifacts.elastic.co/packages/7.x/apt stable main"
-ELASTICSEARCH_PKG="elasticsearch-7.16.2-amd64.deb"
-ELASTICSEARCH_PKG_HASH="${ELASTICSEARCH_PKG}.sha512"
-ELASTICSEARCH_PKG_URL="https://artifacts.elastic.co/downloads/elasticsearch"
+ELASTICSEARCH_SRC="https://artifacts.elastic.co/packages/7.x/apt"
 
 ###################################################################### VARIABLES
 verbose=''
-vmHostname=$VM_HOSTNAME
-vmIP=$VM_IP
-elastickey=$ELASTICSEARCH_KEY
-elasticsrc=$ELASTICSEARCH_SRC
-elasticpkg=$ELASTICSEARCH_PKG
-elastihash=$ELASTICSEARCH_PKG_HASH
-elasticurl=$ELASTICSEARCH_PKG_URL
+logPrefix=$LOG_PREFIX
+logDirectory=$LOG_DIRECTORY
+logFile=$LOG_FILE
+
+elasticsearchIP=$ELASTICSEARCH_IP
+elasticsearchPort=$ELASTICSEARCH_PORT
+elasticKey=$ELASTICSEARCH_KEY
+elasticSrc=$ELASTICSEARCH_SRC
 
 while [[ $# > 0 ]]; do
    case $1 in
@@ -47,70 +53,77 @@ while [[ $# > 0 ]]; do
    --logfile)
       shift
       logFile=$1;;
-   --elastickey)
+   --ip)
       shift
-      elastickey=$1;;
-   --elasticsrc)
+      elasticsearchIP=$1;;
+   --port)
       shift
-      elasticsrc=$1;;
-   --elasticpkg)
+      elasticsearchPort=$1;;
+   --key)
       shift
-      elasticpkg=$1
-      elastichash=$1".sha";;
-   --elasticurl)
+      elasticKey=$1;;
+   --src)
       shift
-      elasticurl=$1;;
+      elasticSrc=$1;;
    esac
    shift
 done
 
 
 ###################################################################### FUNCTIONS
+show_parameters(){
+   echo "${logPrefix} - Parameters"
+   echo "VERBOSE : ${verbose}"
+   echo "Log directory : ${logDirectory}"
+   echo "Log file : ${logFile}"
+   echo "Elasticsearch IP : ${elasticsearchIP}"
+   echo "Elasticsearch port : ${elasticsearchPort}"
+   echo "Elasticsearch key : ${elasticKey}"
+   echo "Elasticsearch package sources : ${elasticSrc}"
+}
+
 elasticsearch_prepare(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Prepare"; fi 
-   wget -qO - ${elastickey} | sudo apt-key add -
-   echo "deb ${elasticurl}/${elasticsrc}" | sudo tee /etc/apt/sources.list.d/elastic-7.x.list
-   sudo apt-get install elasticsearch
-   wget ${elasticurl}/${elasticpkg}
-   wget ${elasticurl}/${elastichash}
-   shasum -a 512 -c ${elastihash} 
-   sudo dpkg -i ${elasticpkg}
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Prepare"; fi 
+   wget -qO - ${elasticKey} | sudo apt-key add -
+   echo "deb ${elasticSrc} stable main" | sudo tee /etc/apt/sources.list.d/elastic-7.x.list
+   sudo apt-get update >> ${logDirectory}/${logFile}   
 }
 
 elasticsearch_install(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Install"; fi 
-   sudo dpkg -i ${ELASTICSEARCH_PKG}
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Install"; fi 
+   sudo apt-get install elasticsearch >> ${logDirectory}/${logFile}
 }
 
-services_restart() {
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Services restart"; fi 
-   sudo systemctl daemon-reload >> ${LOG_FILE}
-   sudo systemctl enable elasticsearch.service >> ${LOG_FILE} 
-   sudo systemctl start elasticsearch.service >> ${LOG_FILE} 
+elasticsearch_configure(){
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Configure"; fi 
+   sudo echo "
+network.host: ${elasticsearchIP}
+http.port: ${elasticsearchPort}
+discovery.seed_hosts: [\"${elasticsearchIP}\", \"[::1]\"]
+   " >> /etc/elasticsearch/elasticsearch.yml
+}
+
+elasticsearch_service_start() {
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Services restart"; fi 
+   sudo systemctl daemon-reload >> ${logDirectory}/${logFile}
+   sudo systemctl enable elasticsearch.service >> ${logDirectory}/${logFile} 
+   sudo systemctl start elasticsearch.service >> ${logDirectory}/${logFile} 
 }
 
 ########################################################################### MAIN
 main() {
+   show_parameters >> ${logDirectory}/${logFile} 
    if [[ -n $verbose ]]; then
-      echo "${logPrefix} - Parameters"
-      echo "VERBOSE : ${verbose}"
-      echo "Log directory : ${logDirectory}"
-      echo "Log file : ${logFile}"
-      echo "Elasticsearch key : ${elastickey}"
-      echo "Elasticsearch package sources : ${elasticsrc}"
-      echo "Elasticsearch package : ${elasticpkg}"
-      echo "Elasticsearch package hash : ${elastihash}"
-      echo "Elasticsearch package url : ${elasticurl}"
+      show_parameters
    fi
-
-   mkdir -p $logDirectory
+   
+   mkdir -p ${logDirectory}
    touch ${logDirectory}/${logFile}
-   
-   
-   # elasticsearch_prepare
-   # elasticsearch_install
-   # common_configure
-   services_restart
+      
+   elasticsearch_prepare
+   elasticsearch_install
+   elasticsearch_configure
+   elasticsearch_service_start
 }
 
 main

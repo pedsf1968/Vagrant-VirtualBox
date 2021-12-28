@@ -5,13 +5,15 @@
 # ARGS        
 # --help, -h               : Show Vagrantfile options
 # --verbose, -v            : Verbose installation
+# --timezone=TIME_ZONE     : Specify the time zone
+#
 # --name=VM_NAME           : Specify a name for the VM
 # --hostname=VM_HOSTNAME   : Specify a hostname for the VM
 # --ip=VM_IP               : Specify an IP for the VM
 # --cpus=VM_CPUS           : Specify the VM core number
 # --memory=VM_MEMORY       : Specify the VM memory amount in ko
+#
 # --range=NETWORK_IP_RANGE : Specify the NTP server network range
-# --timezone=TIME_ZONE     : Specify the time zone
 #
 # AUTHOR      : PEDSF
 # EMAIL       : pedsf.fullstack@gmail.com
@@ -21,24 +23,31 @@
 require 'getoptlong'
 
 ###################################################################### CONSTANTS
+LOG_DIRECTORY="/home/vagrant/logs"
+LOG_PREFIX="NTP"
+
+NETWORK_TIMEZONE = "Europe/Paris"
+
 VM_NAME = "Vagrant-Chrony-server"
 VM_HOSTNAME = "NTP-server"
 VM_IP = "10.1.33.11"
 VM_CPUS = "1"
 VM_MEMORY = "1024"
 VM_GUI = false
+
 NETWORK_IP_RANGE = "10.1.33.0/24"
-NETWORK_TIMEZONE = "Europe/Paris"
+
 
 ###################################################################### VARIABLES
 verbose = nil
+networkTimezone = "#{NETWORK_TIMEZONE}"
+
 vmName = "#{VM_NAME}"
 vmHostname = "#{VM_HOSTNAME}"
 vmIP = "#{VM_IP}"
 vmCpus = "#{VM_CPUS}"
 vmMemory = "#{VM_MEMORY}"
 networkIpRange = "#{NETWORK_IP_RANGE}"
-networkTimezone = "#{NETWORK_TIMEZONE}"
 
 #################################################################### LAUNCH ARGS
 opts = GetoptLong.new(
@@ -128,11 +137,23 @@ Vagrant.configure("2") do |config|
     vb.gui = VM_GUI
   end
   
+  # launch common install
+  commonParameters = "#{verbose}"
+  commonParameters += " --logprefix #{LOG_PREFIX}-Common"
+  commonParameters += " --logdirectory #{LOG_DIRECTORY}"
+  commonParameters += " --logfile common.log"
+  commonParameters += " --ntpIP #{vmIP}"
+  commonParameters += " --timezone #{networkTimezone}"
+  commonParameters += " --hostname #{vmHostname}"
+  commonParameters += " --ip #{vmIP}"
+  
+  config.vm.provision :shell, :path => "../VB-Common/common-install.sh", :args => commonParameters
+
   # launch Chrony install
   chronyParameters = "#{verbose}"
-  chronyParameters += " --hostname #{vmHostname}"
-  chronyParameters += " --ip #{vmIP}"
-  chronyParameters += " --timezone #{networkTimezone}"
+  chronyParameters += " --logprefix #{LOG_PREFIX}-Chrony"
+  chronyParameters += " --logdirectory #{LOG_DIRECTORY}"
+  chronyParameters += " --logfile chrony.log"
   chronyParameters += " --range #{networkIpRange}"
 
   config.vm.provision :shell, :path => "chrony-install.sh", :args => chronyParameters

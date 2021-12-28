@@ -1,11 +1,17 @@
 ################################################################################
-# FILE NAME   : elk-install.sh
+# FILE NAME   : kibana-install.sh
 # FILE TYPE   : BASH
-# VERSION     : 211223
+# VERSION     : 211227
 # ARGS        
-# --verbose                : Verbose installation
-# --hostname VM_HOSTNAME   : Specify a hostname for the VM
-# --ip VM_IP               : Specify an IP for the VM
+# --verbose                      : Verbose installation
+# --logprefix LOG_PREFIX         : Specify prefix of log message
+# --logdirectory LOG_DIRECTORY   : Specify the directory of installation log file
+# --logfile LOG_FILE             : Specify the installation log file name
+#
+# --ip KIBANA_IP                 : Specify the IP for Elasticsearch (127.0.0.1)
+# --port KIBANA_PORT             : Specify the port for Elasticsearch (9200)
+# --key KIBANA_KEY               : Elasticsearch GPG repository key
+# --src KIBANA_SRC               : Elasticsearch repository url
 #
 # AUTHOR      : PEDSF
 # EMAIL       : pedsf.fullstack@gmail.com
@@ -16,25 +22,26 @@
 ###################################################################### CONSTANTS
 MESSAGE_PREFIX="ELK"
 LOG_DIRECTORY=/home/vagrant/logs
-LOG_FILE=$LOG_DIRECTORY/elk.log
-VM_HOSTNAME="ELK-server"
-VM_IP="10.1.33.11"
+LOG_FILE=kibana.log
 
-ELASTICSEARCH_KEY="https://artifacts.elastic.co/GPG-KEY-elasticsearch"
-ELASTICSEARCH_SRC="https://artifacts.elastic.co/packages/7.x/apt stable main"
-ELASTICSEARCH_PKG="elasticsearch-7.16.2-amd64.deb"
-ELASTICSEARCH_PKG_HASH="${ELASTICSEARCH_PKG}.sha512"
-ELASTICSEARCH_PKG_URL="https://artifacts.elastic.co/downloads/elasticsearch"
+ELASTICSEARCH_USERNAME="kibana"
+ELASTICSEARCH_PASSWORD="kibana"
+
+KIBANA_IP="127.0.0.1"
+KIBANA_PORT=5601
+KIBANA_KEY="https://artifacts.elastic.co/GPG-KEY-elasticsearch"
+KIBANA_SRC="https://artifacts.elastic.co/packages/7.x/apt"
 
 ###################################################################### VARIABLES
 verbose=''
-vmHostname=$VM_HOSTNAME
-vmIP=$VM_IP
-elastickey=$ELASTICSEARCH_KEY
-elasticsrc=$ELASTICSEARCH_SRC
-elasticpkg=$ELASTICSEARCH_PKG
-elastihash=$ELASTICSEARCH_PKG_HASH
-elasticurl=$ELASTICSEARCH_PKG_URL
+logPrefix=$LOG_PREFIX
+logDirectory=$LOG_DIRECTORY
+logFile=$LOG_FILE
+
+kibanaIP=$KIBANA_IP
+kibanaPort=$KIBANA_PORT
+kibanaKey=$KIBANA_KEY
+kibanaSrc=$KIBANA_SRC
 
 while [[ $# > 0 ]]; do
    case $1 in
@@ -49,98 +56,79 @@ while [[ $# > 0 ]]; do
    --logfile)
       shift
       logFile=$1;;
-   --elastickey)
+   --ip)
       shift
-      elastickey=$1;;
-   --elasticsrc)
+      kibanaIP=$1;;
+   --port)
       shift
-      elasticsrc=$1;;
-   --elasticpkg)
+      kibanaPort=$1;;
+   --key)
       shift
-      elasticpkg=$1
-      elastichash=$1".sha";;
-   --elasticurl)
+      kibanaKey=$1;;
+   --src)
       shift
-      elasticurl=$1;;
+      kibanaSrc=$1;;
    esac
    shift
 done
 
 
 ###################################################################### FUNCTIONS
-linux_update(){   
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Update"; fi
-   sudo apt-get update >> ${LOG_FILE}
-   sudo apt-get upgrade -y >> ${LOG_FILE}
+show_parameters(){
+   echo "${logPrefix} - Parameters"
+   echo "VERBOSE : ${verbose}"
+   echo "Log directory : ${logDirectory}"
+   echo "Log file : ${logFile}"
+   echo "Kibana IP : ${kibanaIP}"
+   echo "Kibana port : ${kibanaPort}"
+   echo "Kibana key : ${kibanaKey}"
+   echo "Kibana package sources : ${kibanaSrc}"
 }
 
-common_install(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Common install"; fi
-   sudo apt-get install -y -qq net-tools telnet sshpass nfs-common >> ${LOG_FILE}
-   sudo apt-get install -y -qq vim tree python3-pip >> ${LOG_FILE}
-   sudo loadkeys fr
+kibana_prepare(){
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Prepare"; fi 
+   wget -qO - ${kibanaKey} | sudo apt-key add -
+   echo "deb ${kibanaSrc} stable main" | sudo tee /etc/apt/sources.list.d/elastic-7.x.list
+   sudo apt-get update >> ${logDirectory}/${logFile}   
 }
 
-ssh_setting(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - SSH setting"; fi 
-   sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/g' /etc/ssh/sshd_config
-   sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+kibana_install(){
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Install"; fi 
+   sudo apt-get install kibana >> ${logDirectory}/${logFile}
 }
 
-elasticsearch_prepare(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Prepare"; fi 
-   wget -qO - ${elastickey} | sudo apt-key add -
-   echo "deb ${elasticurl}/${elasticsrc}" | sudo tee /etc/apt/sources.list.d/elastic-7.x.list
-   sudo apt-get install elasticsearch
-   wget ${elasticurl}/${elasticpkg}
-   wget ${elasticurl}/${elastichash}
-   shasum -a 512 -c ${elastihash} 
-   sudo dpkg -i ${elasticpkg}
+kibana_configure(){
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Configure"; fi 
+   sudo echo "
+server.host: \"${kibanaIP}\"
+server.port: ${kibanaPort}
+elasticsearch.hosts: [\"http://${kibanaIP}:9200\"]
+elasticsearch.username: \"${ELASTICSEARCH_USERNAME}\"
+elasticsearch.password: \"${ELASTICSEARCH_PASSWORD}\"
+   " >> /etc/kibana/kibana.yml   
 }
 
-elasticsearch_install(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Install"; fi 
-   sudo dpkg -i ${ELASTICSEARCH_PKG}
-}
-
-common_configure(){
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Configuration setting"; fi 
-   # set right name and IP in /etc/hosts file
-   sudo sed -i /${vmHostname}/d /etc/hosts
-   sudo sed -i s/^ubuntu*/${vmHostname}/g /etc/hosts
-   sudo bash -c "echo ${vmIP}\t${vmHostname}\t${vmHostname} >> /etc/hosts"
-}
-
-services_restart() {
-   if [[ -n $verbose ]]; then echo "${MESSAGE_PREFIX} - Services restart"; fi 
-   sudo systemctl daemon-reload >> ${LOG_FILE}
-   sudo systemctl restart sshd >> ${LOG_FILE}
-  
-   sudo systemctl enable elasticsearch.service >> ${LOG_FILE} 
-   sudo systemctl start elasticsearch.service >> ${LOG_FILE} 
+kibana_service_start() {
+   if [[ -n $verbose ]]; then echo "${logPrefix} - Services restart"; fi 
+   sudo systemctl daemon-reload >> ${logDirectory}/${logFile}
+   sudo systemctl enable kibana.service >> ${logDirectory}/${logFile} 
+   sudo systemctl start kibana.service >> ${logDirectory}/${logFile} 
 }
 
 ########################################################################### MAIN
 main() {
+   show_parameters >> ${logDirectory}/${logFile} 
    if [[ -n $verbose ]]; then
-      echo "${MESSAGE_PREFIX} - Parameters"
-      echo "VERBOSE : ${verbose}"
-      echo "Log directory : ${LOG_DIRECTORY}"
-      echo "Log file : ${LOG_FILE}"
-      echo "Hostname : ${vmHostname}"
-      echo "IP : ${vmIP}"
+      show_parameters
    fi
-
+   
    mkdir -p ${logDirectory}
    touch ${logDirectory}/${logFile}
    
-   linux_update
-   common_install
-   ssh_setting
-   # elasticsearch_prepare
-   # elasticsearch_install
-   # common_configure
-   services_restart
+   kibana_prepare
+   kibana_install
+   kibana_configure
+   kibana_service_start
 }
 
 main
