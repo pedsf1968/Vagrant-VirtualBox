@@ -1,14 +1,10 @@
 ################################################################################
 # FILE NAME   : nagios-install.sh
 # FILE TYPE   : BASH
-# VERSION     : 210717
+# VERSION     : 220102
 # ARGS        
 # --verbose                     : Verbose installation
 # --managementIP MANAGEMENT_IP  : Specify the management IP
-# --ntpIP NTP_IP                : Specify the NTP server IP
-# --timezone TIME_ZONE          : Specify the time zone
-# --hostname VM_HOSTNAME        : Specify a hostname for the VM
-# --ip VM_IP                    : Specify an IP for the VM
 # --archive ARCHIVE_URL         : Specify the Nagios archive to install
 # --plugins PLUGINS_ARCHIVE_URL : Specify the Nagios plugins URL link archive
 # --directory NAGIOS_DIRECTORY  : Specify the directory where to install Nagios configuration
@@ -21,14 +17,14 @@
 ################################################################################
 
 ###################################################################### CONSTANTS
-MESSAGE_PREFIX="NAGIOS"
-LOG_DIRECTORY=/home/vagrant/logs
-LOG_FILE=$LOG_DIRECTORY/nagios.log
+LOG_PREFIX="NAGIOS"
+LOG_FOLDER=/home/vagrant/logs
+LOG_FILE=nagios.log
+
 MANAGMENT_IP=".*"
-NTP_IP="10.1.33.11"
-NETWORK_TIMEZONE="Europe/Paris"
 VM_HOSTNAME="NAGIOS-server"
 VM_IP="10.1.33.13"
+
 NAGIOS_ARCHIVE_URL="https://assets.nagios.com/downloads/nagioscore/releases/nagios-4.4.6.tar.gz"
 NAGIOS_PLUGINS_ARCHIVE_URL="https://nagios-plugins.org/download/nagios-plugins-2.3.3.tar.gz"
 NAGIOS_DIRECTORY="/usr/local/nagios/my_conf"
@@ -36,12 +32,13 @@ NAGIOS_DEPLOYMENT_DIRECTORY="/tmp"
 NAGIOS_ADMIN_PWD="nagios"
 
 ###################################################################### VARIABLES
-verbose=""
+verbose=''
+logPrefix=$LOG_PREFIX
+logFolder=$LOG_FOLDER
+logFile=$LOG_FILE
+
 managementIP=${MANAGMENT_IP}
-ntpIP=${NTP_IP}
-networkTimezone=${NETWORK_TIMEZONE}
-vmHostname = ${VM_HOSTNAME}
-vmIP = ${VM_IP}
+
 nagiosArchiveUrl=${NAGIOS_ARCHIVE_URL}
 nagiosPluginsArchiveUrl=${NAGIOS_PLUGINS_ARCHIVE_URL}
 nagiosDirectory=${NAGIOS_DIRECTORY}
@@ -51,21 +48,18 @@ while [[ $# > 0 ]]; do
    case $1 in
    --verbose) 
       verbose="True";;
-   --managementIP)
+   --logprefix)
+      shift
+      logPrefix=$1;;
+   --logfolder)
+      shift
+      logFolder=$1;;
+   --logfile)
+      shift
+      logFile=$1;;
+   --managementip)
       shift
       managementIP=$1;;
-   --ntpIP)
-      shift
-      ntpIP=$1;;
-   --timezone)
-      shift
-      networkTimezone=$1;;
-   --ip)
-      shift
-      vmIP=$1;;
-   --hostname)
-      shift
-      vmHostname=$1;;
    --archive)
       shift
       nagiosArchiveUrl=$1;;
@@ -83,49 +77,36 @@ while [[ $# > 0 ]]; do
 done
 
 ###################################################################### FUNCTIONS
-linux_update(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Linux update"; fi
-   sudo apt-get update >> ${LOG_FILE}
-   sudo apt-get upgrade -y >> ${LOG_FILE}
-}
-
-common_install(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Common packages install"; fi
-   sudo apt-get install -y -qq vim net-tools telnet python3-pip sshpass nfs-common >> ${LOG_FILE}
-}
-
-ssh_setting(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - SSH setting"; fi
-   sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/g' /etc/ssh/sshd_config
-   sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-}
-
-ntp_setting(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - NTP setting"; fi
-   sudo sed -i "s/#FallbackNTP=ntp.ubuntu.com/FallbackNTP=${ntpIP}/g" /etc/systemd/timesyncd.conf
-   sudo timedatectl set-timezone ${networkTimezone}
-   sudo timedatectl set-ntp true
+show_parameters(){
+   echo "$(date +'%Y/%m/%d-%R:%S') : ${logPrefix} - Parameters"
+      echo "Log directory : ${logFolder}"
+      echo "Log file : ${logFile}"
+      echo "ManagementIP : ${managementIP}"
+      echo "Archive URL : ${nagiosArchiveUrl}" 
+      echo "Plugins archive URL : ${nagiosPluginsArchiveUrl}" 
+      echo "Directory : ${nagiosDirectory}"
+      echo "Admin password : ${nagiosAdminPassword}"
 }
 
 nagios_package_install(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Apache install"; fi
-   sudo apt-get install -y -qq apache2 >> ${LOG_FILE}
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - PHP install"; fi
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - Apache install"; fi
+   sudo apt-get install -y -qq apache2 >> ${logFolder}/${logFile}
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - PHP install"; fi
    sudo apt-get install -y -qq php php-gd php-imap php-curl php-dev libmcrypt-dev php-pear  >> ${LOG_FILE}
-   sudo pecl channel-update pecl.php.net >> ${LOG_FILE}
+   sudo pecl channel-update pecl.php.net >> ${logFolder}/${logFile}
    sudo pecl install mcrypt-1.0.3 <<<''
    sudo bash -c "echo 'extension=mcrypt.so' >> /etc/php/7.4/cli/php.ini"
 
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Perl libs install"; fi
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - Perl libs install"; fi
    sudo apt-get install -y -qq libxml-libxml-perl libnet-snmp-perl libperl-dev libnumber-format-perl libconfig-inifiles-perl libdatetime-perl libnet-dns-perl >> ${LOG_FILE}
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Graphic libs install"; fi
-   sudo apt-get install -y -qq libpng-dev libjpeg-dev libgd-dev >> ${LOG_FILE}
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Compilation tools libs install"; fi
-   sudo apt-get install -y -qq gcc make autoconf libc6 unzip libssl-dev >> ${LOG_FILE}
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${logFolder}/${logFile} - Graphic libs install"; fi
+   sudo apt-get install -y -qq libpng-dev libjpeg-dev libgd-dev >> ${logFolder}/${logFile}
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - Compilation tools libs install"; fi
+   sudo apt-get install -y -qq gcc make autoconf libc6 unzip libssl-dev >> ${logFolder}/${logFile}
 }
 
 nagios_user_configure(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - User configuration setting"; fi
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - User configuration setting"; fi
    sudo useradd -m -p $(openssl passwd ${nagiosAdminPassword}) nagios
    sudo groupadd nagcmd
    sudo usermod --shell /bin/bash nagios
@@ -148,45 +129,42 @@ alias nStatus='sudo systemctl status nagios'
 }
 
 nagios_install(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Install"; fi
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - Install"; fi
    sudo mkdir -p ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios
-   wget ${nagiosArchiveUrl} -P ${NAGIOS_DEPLOYMENT_DIRECTORY} >> ${LOG_FILE}
+   wget ${nagiosArchiveUrl} -P ${NAGIOS_DEPLOYMENT_DIRECTORY} >> ${logFolder}/${logFile}
    sudo tar -xzf ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-*tar.gz -C ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios --strip-components=1 >> ${LOG_FILE}
    sudo rm ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-*tar.gz
 
    cd ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios
    sudo ./configure --with-httpd-conf=/etc/apache2/sites-enabled --with-command-group=nagcmd >> ${LOG_FILE} 
-   sudo make all >> ${LOG_FILE}
-   sudo make install >> ${LOG_FILE}
-   sudo make install-daemoninit >> ${LOG_FILE}
-   sudo make install-commandmode >> ${LOG_FILE}
-   sudo make install-config >> ${LOG_FILE}
-   sudo make install-webconf >> ${LOG_FILE}
+   sudo make all >> ${logFolder}/${logFile}
+   sudo make install >> ${logFolder}/${logFile}
+   sudo make install-daemoninit >> ${logFolder}/${logFile}
+   sudo make install-commandmode >> ${logFolder}/${logFile}
+   sudo make install-config >> ${logFolder}/${logFile}
+   sudo make install-webconf >> ${logFolder}/${logFile}
 }
 
 nagios_plugins_install(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Plugins install"; fi
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - Plugins install"; fi
    sudo mkdir -p ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-plugins
-   wget ${nagiosPluginsArchiveUrl} -P /${NAGIOS_DEPLOYMENT_DIRECTORY} >> ${LOG_FILE}
+   wget ${nagiosPluginsArchiveUrl} -P /${NAGIOS_DEPLOYMENT_DIRECTORY} >> ${logFolder}/${logFile}
    sudo tar -xzf ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-plugins-*tar.gz -C ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-plugins --strip-components=1 >> ${LOG_FILE}
-   sudo rm ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-plugins-*tar.gz >> ${LOG_FILE}
+   sudo rm ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-plugins-*tar.gz >> ${logFolder}/${logFile}
    
    cd ${NAGIOS_DEPLOYMENT_DIRECTORY}/nagios-plugins
    sudo ./configure --with-nagios-user=nagios --with-nagios-group=nagcmd  --with-openssl=/usr/bin/openssl >> ${LOG_FILE}
 
-   sudo make >> ${LOG_FILE}
-   sudo make install >> ${LOG_FILE}
+   sudo make >> ${logFolder}/${logFile}
+   sudo make install >> ${logFolder}/${logFile}
 }
 
 nagios_configure(){
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Configure"; fi
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - Configure"; fi
    # Enable Apache modules
-   sudo a2enmod rewrite >> ${LOG_FILE}
-   sudo a2enmod cgi >> ${LOG_FILE}
-
-   # Set ip in /etc/hosts
-   echo "${vmIP} ${vmHostname}" | sudo tee -a /etc/hosts
-
+   sudo a2enmod rewrite >> ${logFolder}/${logFile}
+   sudo a2enmod cgi >> ${logFolder}/${logFile}
+   
    # Move Nagios configuration files to configuration directory
    sudo mkdir ${nagiosDirectory}
    sudo cp ${NAGIOS_DEPLOYMENT_DIRECTORY}/*.cfg ${nagiosDirectory}
@@ -202,43 +180,28 @@ cfg_dir=${nagiosDirectory}
    # Set Nagios admin user to web interface
    sudo htpasswd -cb /usr/local/nagios/etc/htpasswd.users nagiosadmin ${nagiosAdminPassword}
    sudo chown -R nagios:nagcmd /usr/local/nagios
-
-   # set right name and IP in /etc/hosts file
-   sed -i /${vmHostname}/d /etc/hosts
-   sed -i s/$(cat /etc/hosts | grep ubuntu | cut -f2)/${vmHostname}/g /etc/hosts
-   sudo bash -c "echo ${vmIP}\t${vmHostname}\t${vmHostname} >> /etc/hosts"
 }
 
 services_restart() {
-   if [[ -n ${verbose} ]]; then echo "${MESSAGE_PREFIX} - Restart services"; fi
-   sudo systemctl daemon-reload >> ${LOG_FILE}
-   sudo systemctl restart sshd >> ${LOG_FILE}
-   sudo systemctl restart systemd-timesyncd >> ${LOG_FILE}
-   sudo systemctl restart apache2 >> ${LOG_FILE}
-   sudo systemctl start nagios >> ${LOG_FILE} 
+   if [[ -n ${verbose} ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${LOG_PREFIX} - Restart services"; fi
+   sudo systemctl daemon-reload >> ${logFolder}/${logFile}
+   sudo systemctl restart sshd >> ${logFolder}/${logFile}
+   sudo systemctl restart systemd-timesyncd >> ${logFolder}/${logFile}
+   sudo systemctl restart apache2 >> ${logFolder}/${logFile}
+   sudo systemctl start nagios >> ${logFolder}/${logFile} 
 }
 
 
 ########################################################################### MAIN
 main(){
-   if [[ -n ${verbose} ]]; then 
-      echo "${MESSAGE_PREFIX} - Parameters"
-      echo "Log directory : ${LOG_DIRECTORY}"
-      echo "Log file : ${LOG_FILE}"
-      echo "ManagementIP : ${MANAGEMENT_IP}"
-      echo "NTP IP : ${NTP_IP}"
-      echo "Network time zone : ${networkTimezone}"
-      echo "Hostname : ${vmHostname}"
-      echo "IP : ${vmIP}"
-      echo "Archive URL : ${nagiosArchiveUrl}" 
-      echo "Plugins archive URL : ${nagiosPluginsArchiveUrl}" 
-      echo "Directory : ${nagiosDirectory}"
-      echo "Admin password : ${nagiosAdminPassword}"
+   mkdir -p $logFolder
+   touch $logFolder/$logFile
+
+   show_parameters >> ${logFolder}/${logFile} 
+   if [[ -n $verbose ]]; then
+      show_parameters
    fi
-
-   mkdir -p $LOG_DIRECTORY
-   touch $LOG_FILE
-
+   
    linux_update
    common_install
    ssh_setting

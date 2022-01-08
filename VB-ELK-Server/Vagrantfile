@@ -1,18 +1,21 @@
 ################################################################################
 # FILE NAME   : Vagrantfile
 # FILE TYPE   : Vagrantfile
-# VERSION     : 211223
+# VERSION     : 220102
 # ARGS        
-# --help, -h               : Show Vagrantfile options
-# --verbose, -v            : Verbose installation
-# --ntpip=NTP_IP           : Specify the NTP server IP
-# --timezone=TIME_ZONE     : Specify the time zone
+# --help, -h                  : Show Vagrantfile options
+# --verbose, -v               : Verbose installation
+# --ntpip=NTP_IP              : Specify the NTP server IP (10.1.33.10)
+# --timezone=NETWORK_TIMEZONE : Specify the time zone (Europe/Paris)
 #
-# --name=VM_NAME           : Specify a name for the VM
-# --hostname=VM_HOSTNAME   : Specify a hostname for the VM
-# --ip=VM_IP               : Specify an IP for the VM
-# --cpus=VM_CPUS           : Specify the VM core number
-# --memory=VM_MEMORY       : Specify the VM memory amount in ko
+# --name=VM_NAME              : Specify a name for the VM (Vagrant-ELK-server)
+# --hostname=VM_HOSTNAME      : Specify a hostname for the VM (ELK-server)
+# --ip=VM_IP                  : Specify an IP for the VM (10.1.33.15)
+# --cpus=VM_CPUS              : Specify the VM core number (4)
+# --memory=VM_MEMORY          : Specify the VM memory amount in ko (4096)
+#
+# --user=USERNAME             : Specify the superuser name for Elasticsearch (administrator)
+# --password=PASSWORD         : Specify the superuser password for Elasticsearch (elastic)
 #
 # AUTHOR      : PEDSF
 # EMAIL       : pedsf.fullstack@gmail.com
@@ -22,10 +25,10 @@
 require 'getoptlong'
 
 ###################################################################### CONSTANTS
-LOG_DIRECTORY="/home/vagrant/logs"
+LOG_FOLDER="/home/vagrant/logs"
 LOG_PREFIX="ELK"
 
-NTP_IP = "10.1.33.11"
+NTP_IP = "10.1.33.10"
 NETWORK_TIMEZONE = "Europe/Paris"
 
 VM_NAME = "Vagrant-ELK-server"
@@ -37,8 +40,11 @@ VM_GUI = false
 
 ELASTICSEARCH_IP="#{VM_IP}"
 ELASTICSEARCH_PORT=9200
+ELASTICSEARCH_SHARDING_PORT=9300
 ELASTICSEARCH_KEY="https://artifacts.elastic.co/GPG-KEY-elasticsearch"
 ELASTICSEARCH_SRC="https://artifacts.elastic.co/packages/7.x/apt stable main"
+ELASTICSEARCH_USERNAME="administrator"
+ELASTICSEARCH_PASSWORD="elastic"
 
 KIBANA_IP="#{VM_IP}"
 KIBANA_PORT=5601
@@ -57,10 +63,9 @@ vmCpus = "#{VM_CPUS}"
 vmMemory = "#{VM_MEMORY}"
 
 elasticsearchIP = "#{ELASTICSEARCH_IP}"
-elasticsearchPort ="#{ELASTICSEARCH_PORT}"
-
+elasticsearchUsername = "#{ELASTICSEARCH_USERNAME}"
+elasticsearchPassword = "#{ELASTICSEARCH_PASSWORD}"
 kibanaIP = "#{KIBANA_IP}"
-kibanaPort ="#{KIBANA_PORT}"
 
 #################################################################### LAUNCH ARGS
 opts = GetoptLong.new(
@@ -73,6 +78,8 @@ opts = GetoptLong.new(
   [ '--ip', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--cpus', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--memory', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--user', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--password', GetoptLong::REQUIRED_ARGUMENT ],
 )
 
 opts.each do |opt, arg|
@@ -98,6 +105,10 @@ Vagrant [OPTION] ...
     Set VM core number, if the number of cores is not supplied default is #{VM_CPUS}
 --ip=VM_MEMORY:
     Set VM memory amount, if the memory in ko is not supplied default is #{VM_MEMORY}
+--user=USERNAME:
+    Set superuser name for Elasticsearch, if name is not supplied default is #{ELASTICSEARCH_USERNAME}
+--password=PASSWORD:
+    Set superuser password for Elasticsearch, if name is not supplied default is #{ELASTICSEARCH_PASSWORD}
     EOF
     exit 0
     when '--verbose'
@@ -112,10 +123,16 @@ Vagrant [OPTION] ...
       vmHostname = arg
     when '--ip'
       vmIP = arg
+      elasticsearchIP = arg
+      kibanaIP = arg
     when '--cpus'
       vmCpus = arg
     when '--memory'
       vmMemory = arg
+    when '--user'
+      elasticsearchUsername = arg
+    when '--password'
+      elasticsearchPassword = arg
   end
 end
 
@@ -123,29 +140,38 @@ case ARGV[0]
 when "provision", "up"
 
   if verbose != nil
-    print "NTP server IP : #{ntpIP}\n"
+    print "\nNTP server IP : #{ntpIP}\n"
     print "Network time zone : #{networkTimezone}\n"
     print "\nName : #{vmName}\n"
     print "Hostname : #{vmHostname}\n"
     print "VM IP : #{vmIP}\n"
-    print "Elasticsearch IP : #{elasticsearchIP}\n"
-    print "Elasticsearch port : #{elasticsearchPort}\n"
-    print "Kibana IP : #{kibanaIP}\n"
-    print "Kibana port : #{kibanaPort}\n"
     print "Cores : #{vmCpus}\n"
     print "Memory : #{vmMemory}\n"
+    print "\nElasticsearch IP : #{elasticsearchIP}\n"
+    print "Elasticsearch port : #{ELASTICSEARCH_PORT}\n"
+    print "Elasticsearch sharding port : #{ELASTICSEARCH_SHARDING_PORT}\n"
+    print "Elasticsearch key : #{ELASTICSEARCH_KEY}\n"
+    print "Elasticsearch source : #{ELASTICSEARCH_SRC}\n"
+    print "Elasticsearch user : #{ELASTICSEARCH_USERNAME}\n"
+    print "Elasticsearch password : #{ELASTICSEARCH_PASSWORD}\n"
+    print "\nKibana IP : #{kibanaIP}\n"
+    print "Kibana port : #{KIBANA_PORT}\n"
+    print "Kibana key : #{ELASTICSEARCH_KEY}\n"
+    print "Kibana source : #{ELASTICSEARCH_SRC}\n"
   end
 end
 
 ########################################################################## BUILD
 Vagrant.configure("2") do |config|
+  config.vm.boot_timeout=1200
   config.vm.box = "ubuntu/focal64"
   config.vm.box_url = "ubuntu/focal64"
   config.vm.box_check_update = true
   config.vm.hostname = vmHostname
   config.vm.network "private_network", ip: vmIP
-  config.vm.network :forwarded_port, guest: elasticsearchPort, host: elasticsearchPort
-  config.vm.network :forwarded_port, guest: kibanaPort, host: kibanaPort
+  config.vm.network :forwarded_port, guest: ELASTICSEARCH_PORT, host: ELASTICSEARCH_PORT
+  config.vm.network :forwarded_port, guest: ELASTICSEARCH_SHARDING_PORT, host: ELASTICSEARCH_SHARDING_PORT
+  config.vm.network :forwarded_port, guest: KIBANA_PORT, host: KIBANA_PORT
   
   config.vm.provider "virtualbox" do |vb|
     vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
@@ -159,7 +185,7 @@ Vagrant.configure("2") do |config|
   # launch common install
   commonParameters = "#{verbose}"
   commonParameters += " --logprefix #{LOG_PREFIX}-Common"
-  commonParameters += " --logdirectory #{LOG_DIRECTORY}"
+  commonParameters += " --logfolder #{LOG_FOLDER}"
   commonParameters += " --logfile common.log"
   commonParameters += " --ntpIP #{ntpIP}"
   commonParameters += " --timezone #{networkTimezone}"
@@ -171,25 +197,28 @@ Vagrant.configure("2") do |config|
   # launch Elasticsearch install
   elasticsearchParameters = "#{verbose}"
   elasticsearchParameters += " --logprefix #{LOG_PREFIX}-Elasticsearch"
-  elasticsearchParameters += " --logdirectory #{LOG_DIRECTORY}"
+  elasticsearchParameters += " --logfolder #{LOG_FOLDER}"
   elasticsearchParameters += " --logfile elasticsearch.log"
   elasticsearchParameters += " --ip #{elasticsearchIP}"
-  elasticsearchParameters += " --port #{elasticsearchPort}"
+  elasticsearchParameters += " --port #{ELASTICSEARCH_PORT}"
   elasticsearchParameters += " --key #{ELASTICSEARCH_KEY}"
   elasticsearchParameters += " --src #{ELASTICSEARCH_SRC}"
+  elasticsearchParameters += " --user #{elasticsearchUsername}"
+  elasticsearchParameters += " --password #{elasticsearchPassword}"
   
   config.vm.provision :shell, :path => "elasticsearch-install.sh", :args => elasticsearchParameters
 
   # launch Kibana install
   kibanaParameters = "#{verbose}"
   kibanaParameters += " --logprefix #{LOG_PREFIX}-Kibana"
-  kibanaParameters += " --logdirectory #{LOG_DIRECTORY}"
+  kibanaParameters += " --logfolder #{LOG_FOLDER}"
   kibanaParameters += " --logfile kibana.log"
   kibanaParameters += " --ip #{kibanaIP}"
-  kibanaParameters += " --port #{kibanaPort}"
+  kibanaParameters += " --port #{KIBANA_PORT}"
   kibanaParameters += " --key #{KIBANA_KEY}"
   kibanaParameters += " --src #{KIBANA_SRC}"
-
+  kibanaParameters += " --elasticsearchip #{elasticsearchIP}"
+  kibanaParameters += " --elasticsearchport #{ELASTICSEARCH_PORT}"
+  
   config.vm.provision :shell, :path => "kibana-install.sh", :args => kibanaParameters
-
 end

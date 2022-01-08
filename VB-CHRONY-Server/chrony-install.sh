@@ -1,7 +1,7 @@
 ################################################################################
 # FILE NAME   : chrony-install.sh
 # FILE TYPE   : BASH
-# VERSION     : 211227
+# VERSION     : 220102
 # ARGS        
 # --verbose                      : Verbose installation
 # --logprefix LOG_PREFIX         : Specify prefix of log message
@@ -24,7 +24,7 @@ LOG_FILE=chrony.log
 
 NETWORK_TIMEZONE="Europe/Paris"
 VM_HOSTNAME="NTP-server"
-VM_IP="10.1.33.11"
+VM_IP="10.1.33.10"
 NETWORK_IP_RANGE='10.1.33.00/24'
 
 ###################################################################### VARIABLES
@@ -60,19 +60,28 @@ while [[ $# > 0 ]]; do
 done
 
 ###################################################################### FUNCTIONS
-chrony-install(){
-   if [[ -n $verbose ]]; then echo "${logPrefix} - Install"; fi 
+show_parameters(){
+   echo "$(date +'%Y/%m/%d-%R:%S') : ${logPrefix} - Parameters"
+   echo "VERBOSE : ${verbose}"
+   echo "Log directory : ${logDirectory}"
+   echo "Log file : ${logFile}"
+   echo "Network range : ${networkIpRange}"
+   echo "Network time zone : ${networkTimezone}"
+}
+
+chrony_install(){
+   if [[ -n $verbose ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${logPrefix} - Install"; fi 
    sudo apt install -y chrony >> ${logDirectory}/${logFile}
 }
 
-chrony-configure(){
-   if [[ -n $verbose ]]; then echo "${logPrefix} - Configuration setting"; fi 
+chrony_configure(){
+   if [[ -n $verbose ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${logPrefix} - Configuration setting"; fi 
    sudo bash -c "echo 'allow '$networkIpRange >> /etc/chrony/chrony.conf"
    sudo timedatectl set-timezone ${networkTimezone}
 }
 
-services_restart() {
-   if [[ -n $verbose ]]; then echo "${logPrefix} - Services restart"; fi 
+chrony_service_start() {
+   if [[ -n $verbose ]]; then echo "$(date +'%Y/%m/%d-%R:%S') : ${logPrefix} - Services restart"; fi 
    sudo systemctl daemon-reload >> ${logDirectory}/${logFile}
    sudo timedatectl set-ntp false >> ${logDirectory}/${logFile}
    sudo systemctl enable chrony >> ${logDirectory}/${logFile} 
@@ -81,21 +90,17 @@ services_restart() {
 
 ########################################################################### MAIN
 main() {
-   if [[ -n $verbose ]]; then
-      echo "${logPrefix} - Parameters"
-      echo "VERBOSE : ${verbose}"
-      echo "Log directory : ${logDirectory}"
-      echo "Log file : ${logFile}"
-      echo "Network range : ${networkIpRange}"
-      echo "Network time zone : ${networkTimezone}"
-   fi
-
    mkdir -p ${logDirectory}
    touch ${logDirectory}/${logFile}
    
-   chrony-install
-   chrony-configure
-   services_restart
+   show_parameters >> ${logDirectory}/${logFile} 
+   if [[ -n $verbose ]]; then
+      show_parameters
+   fi
+   
+   chrony_install
+   chrony_configure
+   chrony_service_start
 }
 
 main

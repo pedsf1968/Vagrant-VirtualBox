@@ -1,1 +1,1 @@
-{"virtualbox":{"/vagrant":{"guestpath":"/vagrant","hostpath":"F:/DSO-DATA/Vagrant/VB-CHRONY-Server","disabled":false,"__vagrantfile":true}}}
+{"virtualbox":{"/vagrant":{"guestpath":"/vagrant","hostpath":"F:/DSO-DATA/Vagrant/VirtualBox/VB-CHRONY-Server","disabled":false,"__vagrantfile":true}}}

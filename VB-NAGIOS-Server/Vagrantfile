@@ -3,21 +3,21 @@
 # FILE TYPE   : Vagrantfile
 # VERSION     : 210722
 # ARGS        
-# --help, -h                    : Show Vagrantfile options
-# --verbose, -v                 : Verbose installation
-# --managementIP=MANAGMENT_IP   : Specify the managment IP
-# --ntpIP=NTP_IP                : Specify the NTP server IP
-# --timezone=TIME_ZONE          : Specify the time zone
-# --name=VM_NAME                : Specify a name for the VM
-# --hostname=VM_HOSTNAME        : Specify a hostname for the VM
-# --ip=VM_IP                    : Specify an IP for the VM
-# --cpus=VM_CPUS                : Specify the VM core number
-# --memory=VM_MEMORY            : Specify the VM memory amount in ko
-# --archive=ARCHIVE_URL         : Specify the Nagios URL link archive
-# --plugins=PLUGINS_ARCHIVE_URL : Specify the Nagios plugins URL link archive
-# --directory=NAGIOS_DIRECTORY  : Specify the directory where to install Nagios configuration
-# --askPwd                      : Ask for Nagios admin password
-# --adminPwd=ADMIN_PWD          : Specify Nagios admin password
+# --help, -h                          : Show Vagrantfile options
+# --verbose, -v                       : Verbose installation
+# --ntpip=NTP_IP                      : Specify the NTP server IP
+# --timezone=TIME_ZONE                : Specify the time zone
+#
+# --name=VM_NAME                      : Specify a name for the VM
+# --hostname=VM_HOSTNAME              : Specify a hostname for the VM
+# --ip=VM_IP                          : Specify an IP for the VM
+# --cpus=VM_CPUS                      : Specify the VM core number
+# --memory=VM_MEMORY                  : Specify the VM memory amount in ko
+#
+# --managmentip=NAGIOS_MANAGEMENT_IP : Specify the managment IP
+# --directory=NAGIOS_DIRECTORY        : Specify the directory where to install Nagios configuration
+# --askPwd                            : Ask for Nagios admin password
+# --adminPwd=ADMIN_PWD                : Specify Nagios admin password
 #
 # AUTHOR      : PEDSF
 # EMAIL       : pedsf.fullstack@gmail.com
@@ -27,32 +27,38 @@
 require 'getoptlong'
 
 ###################################################################### CONSTANTS
-MANAGMENT_IP = ".*"
-NTP_IP = "10.1.33.11"
+LOG_FOLDER="/home/vagrant/logs"
+LOG_PREFIX="NAGIOS"
+
+NTP_IP = "10.1.33.10"
 NETWORK_TIMEZONE = "Europe/Paris"
+
+
 VM_NAME = 'Vagrant-Nagios-server'
 VM_HOSTNAME = "NAGIOS-server"
 VM_IP = "10.1.33.13"
 VM_CPUS = "1"
 VM_MEMORY = "1024"
 VM_GUI = false
+
 NAGIOS_ARCHIVE_URL="https://assets.nagios.com/downloads/nagioscore/releases/nagios-4.4.6.tar.gz"
 NAGIOS_PLUGINS_ARCHIVE_URL="https://nagios-plugins.org/download/nagios-plugins-2.3.3.tar.gz"
 NAGIOS_DIRECTORY="/usr/local/nagios/my_conf"
 NAGIOS_ADMIN_PWD="nagios"
+NAGIOS_MANAGEMENT_IP = ".*"
 
 ###################################################################### VARIABLES
 verbose = nil
-managmentIP = "#{MANAGMENT_IP}"
 ntpIP = "#{NTP_IP}"
 networkTimezone = "#{NETWORK_TIMEZONE}"
+
 vmName = "#{VM_NAME}"
 vmHostname = "#{VM_HOSTNAME}"
 vmIP = "#{VM_IP}"
 vmCpus = "#{VM_CPUS}"
 vmMemory = "#{VM_MEMORY}"
-nagiosArchiveUrl = "#{NAGIOS_ARCHIVE_URL}"
-nagiosPluginsArchiveUrl = "#{NAGIOS_PLUGINS_ARCHIVE_URL}"
+
+managmentIP = "#{NAGIOS_MANAGEMENT_IP}"
 nagiosDirectory = "#{NAGIOS_DIRECTORY}"
 askPassword = nil
 nagiosAdminPassword = "#{NAGIOS_ADMIN_PWD}"
@@ -61,7 +67,6 @@ nagiosAdminPassword = "#{NAGIOS_ADMIN_PWD}"
 opts = GetoptLong.new(
   [ '--help', '-h', GetoptLong::NO_ARGUMENT ],
   [ '--verbose', '-v', GetoptLong::NO_ARGUMENT ],
-  [ '--managementIP', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--ntpIP', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--timezone', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--name', GetoptLong::REQUIRED_ARGUMENT ],
@@ -69,8 +74,7 @@ opts = GetoptLong.new(
   [ '--ip', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--cpus', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--memory', GetoptLong::REQUIRED_ARGUMENT ],
-  [ '--archive', GetoptLong::REQUIRED_ARGUMENT ],
-  [ '--plugins', GetoptLong::REQUIRED_ARGUMENT ],
+  [ '--managementIP', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--directory', GetoptLong::REQUIRED_ARGUMENT ],
   [ '--askPwd', GetoptLong::NO_ARGUMENT ],
   [ '--adminPwd', GetoptLong::REQUIRED_ARGUMENT ]
@@ -85,8 +89,6 @@ Vagrant [OPTION] ...
     Show this help
 --verbose, -v:
     Verbose installation
---managemntIP=MANAGMENT_IP:
-    Set the managment IP, if IP is not supplied default is #{MANAGMENT_IP}
 --ntpIP=NTP_IP:
     Set the NTP server IP, if IP is not supplied default is #{NTP_IP}
 --timezone=TIME_ZONE:
@@ -101,10 +103,8 @@ Vagrant [OPTION] ...
     Set VM core number, if the number of cores is not supplied default is #{VM_CPUS}
 --ip=VM_MEMORY:
     Set VM memory amount, if the memory in ko is not supplied default is #{VM_MEMORY}
---archive=NAGIOS_ARCHIVE_URL:
-    Specify Nagios URL archive, if URL is not supplied default is #{NAGIOS_ARCHIVE_URL}
---plugins=NAGIOS_PLUGINS_ARCHIVE_URL:
-    Specify Nagios plugins URL archive, if URL is not supplied default is #{NAGIOS_PLUGINS_ARCHIVE_URL}
+--managemntIP=NAGIOS_MANAGEMENT_IP:
+    Set the managment IP, if IP is not supplied default is #{NAGIOS_MANAGEMENT_IP}
 --directory=NAGIOS_DIRECTORY:
     Specify Nagios configuration directory in VM, if directory is not supplied default is #{NAGIOS_DIRECTORY}
 --askPwd:
@@ -115,8 +115,6 @@ Vagrant [OPTION] ...
     exit 0
     when '--verbose'
       verbose = opt
-    when '--managmentIP'
-      managmentIP = arg
     when '--ntpIP'
       ntpIP = arg
     when '--timezone'
@@ -131,10 +129,8 @@ Vagrant [OPTION] ...
       vmCpus = arg
     when '--memory'
       vmMemory = arg
-    when '--archive'
-      nagiosArchiveUrl = arg
-    when '--plugins'
-      nagiosPluginsArchiveUrl = arg
+    when '--managmentip'
+      managmentIP = arg
     when '--directory'
       nagiosDirectory = arg
     when '--askPwd'
@@ -165,14 +161,14 @@ when "provision", "up"
   end
 
   if verbose != nil 
-    print "\nManagment IP : #{managmentIP}\n"
-    print "NTP server IP : #{ntpIP}\n"
+    print "\nNTP server IP : #{ntpIP}\n"
     print "Network time zone : #{networkTimezone}\n"
-    print "Name : #{vmName}\n"
+    print "\nName : #{vmName}\n"
     print "Hostname : #{vmHostname}\n"
-    print "IP : #{vmIP}\n"
+    print "VM IP : #{vmIP}\n"
     print "Cores : #{vmCpus}\n"
     print "Memory : #{vmMemory}\n"
+    print "\nManagment IP : #{managmentIP}\n"
     print "Nagios archive : #{nagiosArchiveUrl}\n"
     print "Nagios plugins archive : #{nagiosPluginsArchiveUrl}\n"
     print "Nagios directory : #{nagiosDirectory}\n"  
@@ -199,15 +195,26 @@ Vagrant.configure("2") do |config|
   
   config.vm.provision "file", source: "nagios_conf", destination: "/tmp"
 
+  # launch common install
+  commonParameters = "#{verbose}"
+  commonParameters += " --logprefix #{LOG_PREFIX}-Common"
+  commonParameters += " --logfolder #{LOG_FOLDER}"
+  commonParameters += " --logfile common.log"
+  commonParameters += " --ntpIP #{ntpIP}"
+  commonParameters += " --timezone #{networkTimezone}"
+  commonParameters += " --hostname #{vmHostname}"
+  commonParameters += " --ip #{vmIP}"
+  
+  config.vm.provision :shell, :path => "../VB-Common/common-install.sh", :args => commonParameters
+
   # launch Nagios install
   nagiosParameters = "#{verbose}"
-  nagiosParameters += " --managmentIP #{managmentIP}"
-  nagiosParameters += " --ntpIP #{ntpIP}"
-  nagiosParameters += " --timezone #{networkTimezone}"
-  nagiosParameters += " --hostname #{vmHostname}"
-  nagiosParameters += " --ip #{vmIP}"
-  nagiosParameters += " --archive #{nagiosArchiveUrl}"
-  nagiosParameters += " --plugins #{nagiosPluginsArchiveUrl}"
+  nagiosParameters += " --logprefix #{LOG_PREFIX}-Nagios"
+  nagiosParameters += " --logfolder #{LOG_FOLDER}"
+  nagiosParameters += " --logfile nagios.log"
+  nagiosParameters += " --managmentip #{managmentIP}"
+  nagiosParameters += " --archive #{NAGIOS_ARCHIVE_URL}" 
+  nagiosParameters += " --plugins #{NAGIOS_PLUGINS_ARCHIVE_URL}"
   nagiosParameters += " --directory #{nagiosDirectory}"
   nagiosParameters += " --adminPwd #{nagiosAdminPassword}"
   

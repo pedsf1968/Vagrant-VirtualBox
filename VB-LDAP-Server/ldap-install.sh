@@ -1,7 +1,7 @@
 ################################################################################
 # FILE NAME   : ldap-install.sh
 # FILE TYPE   : BASH
-# VERSION     : 211227
+# VERSION     : 220102
 # ARGS        
 # --verbose                    : Verbose installation
 # --logprefix LOG_PREFIX       : Specify prefix of log message
